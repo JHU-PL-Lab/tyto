@@ -18,7 +18,7 @@ let default : 'key t =
   { get }
 
 let of_smt_model ?(fallback_feeder : 'k t = default) (model : 'k Smt.Model.t)
-    ~(uid : 'k -> int) : 'k t =
+    ~(uid : 'k -> Utils.Uid.t) : 'k t =
   let get (type a) (key : (a, 'k) Key.t) : a =
     let s : (a, 'k) Smt.Symbol.t =
       match key with

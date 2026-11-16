@@ -26,7 +26,7 @@ module Make_of_context (C : CONTEXT) : Solve.SOLVABLE = struct
   let boolS = Z3.Boolean.mk_sort ctx
 
   let mk_symbol sort uid =
-    Z3.Expr.mk_const ctx (Z3.Symbol.mk_int ctx uid) sort
+    Z3.Expr.mk_const ctx (Z3.Symbol.mk_int ctx (Utils.Uid.to_int uid)) sort
 
   let symbol (type a) (s : (a, 'k) Symbol.t) : (a, 'k) t =
     match s with
@@ -36,34 +36,35 @@ module Make_of_context (C : CONTEXT) : Solve.SOLVABLE = struct
   let not_ (e : (bool, 'k) t) : (bool, 'k) t =
     Z3.Boolean.mk_not ctx e
 
-  let list_curry f x y = f [ x ; y ]
-
-  let rec binop : type a b c. (a * a * b, c) Binop.c -> (a, 'k) t -> (a, 'k) t -> (b, 'k) t = function
-    | Plus            -> list_curry @@ Z3.Arithmetic.mk_add ctx
-    | Minus           -> list_curry @@ Z3.Arithmetic.mk_sub ctx
-    | Times           -> list_curry @@ Z3.Arithmetic.mk_mul ctx
-    | Less_than       -> Z3.Arithmetic.mk_lt ctx
-    | Less_than_eq    -> Z3.Arithmetic.mk_le ctx
-    | Greater_than    -> Z3.Arithmetic.mk_gt ctx
-    | Greater_than_eq -> Z3.Arithmetic.mk_ge ctx
-    | Equal           -> Z3.Boolean.mk_eq ctx
-    | Not_equal       -> fun a b -> not_ (Z3.Boolean.mk_eq ctx a b)
-    | Or              -> list_curry @@ Z3.Boolean.mk_or ctx
+  let rec binop
+    : type a b c. (a * a * b, c) Binop.c -> (a, 'k) t -> (a, 'k) t -> (b, 'k) t
+    = fun op x y ->
+    match op with
+    | Plus            -> Z3.Arithmetic.mk_add ctx [x; y]
+    | Minus           -> Z3.Arithmetic.mk_sub ctx [x; y]
+    | Times           -> Z3.Arithmetic.mk_mul ctx [x; y]
+    | Less_than       -> Z3.Arithmetic.mk_lt ctx x y
+    | Less_than_eq    -> Z3.Arithmetic.mk_le ctx x y
+    | Greater_than    -> Z3.Arithmetic.mk_gt ctx x y
+    | Greater_than_eq -> Z3.Arithmetic.mk_ge ctx x y
+    | Equal | Iff     -> Z3.Boolean.mk_eq ctx x y
+    | Not_equal       -> not_ (Z3.Boolean.mk_eq ctx x y)
+    | Or              -> Z3.Boolean.mk_or ctx [x; y]
     (* OCaml division and modulus differ from Z3, so we need some extra encoding *)
-    | Divide -> fun x y ->
-      let q_div = Z3.Arithmetic.mk_div ctx x y in
-      let q_mod = Z3.Arithmetic.Integer.mk_mod ctx x y in
+    | Divide ->
+      let q_div = Z3.Arithmetic.mk_div ctx x y
+      and q_mod = Z3.Arithmetic.Integer.mk_mod ctx x y in
       let adjusted =
         Z3.Boolean.mk_ite ctx
           (binop Greater_than y zero)
           (binop Plus q_div one)
           (binop Minus q_div one)
+      and cond =
+        Z3.Boolean.mk_or ctx
+          [ binop Equal q_mod zero ; binop Greater_than_eq x zero ]
       in
-      Z3.Boolean.mk_ite ctx
-        (binop Or (binop Equal q_mod zero) (binop Greater_than_eq x zero))
-        q_div
-        adjusted
-    | Modulus -> fun x y ->
+      Z3.Boolean.mk_ite ctx cond q_div adjusted
+    | Modulus ->
       binop Minus x (binop Times y (binop Divide x y))
 
   let is_const (type a) (x : (a, 'k) t) : bool =
@@ -81,27 +82,22 @@ module Make_of_context (C : CONTEXT) : Solve.SOLVABLE = struct
     |> Int.to_string
     |> Z3.Params.update_param_value ctx "timeout"
 
-  let () = set_timeout (Mtime.Span.(100 * ms))
+  let () =
+    let open! Mtime.Span in
+    set_timeout (100 * ms)
 
   let unbox_int_expr e =
-    if Z3.Expr.is_numeral e
-    then
-      Z3.Arithmetic.Integer.get_big_int e
-      |> Big_int_Z.int_of_big_int
-      |> Option.some
-    else None
+    Z3.Arithmetic.Integer.get_big_int e
+    |> Big_int_Z.int_of_big_int
 
   let unbox_bool_expr e =
-    if Z3.Boolean.is_bool e
-    then
-      match Z3.Boolean.get_bool_value e with
-      | L_FALSE -> Some false
-      | L_TRUE -> Some true
-      | L_UNDEF -> failwith "Invariant failure: undefined bool."
-   else None
+    match Z3.Boolean.get_bool_value e with
+    | L_FALSE -> false
+    | L_TRUE -> true
+    | L_UNDEF -> invalid_arg "Cannot unboxed bool from non-bool Z3 expression"
 
   let a_of_expr z3_model expr unbox_expr =
-    Option.bind (Z3.Model.get_const_interp_e z3_model expr) unbox_expr
+    Option.map unbox_expr (Z3.Model.get_const_interp_e z3_model expr)
 
   let solve (e : (bool, 'k) t) : 'k Solution.t =
     if Z3.Expr.equal e (const_bool false) then
@@ -120,7 +116,15 @@ module Make_of_context (C : CONTEXT) : Solve.SOLVABLE = struct
             | I _ -> a_of_expr model (symbol s) unbox_int_expr
             | B _ -> a_of_expr model (symbol s) unbox_bool_expr
           in
-          Solution.Sat { value }
+          let domain =
+            List.map (fun decl ->
+              decl
+              |> Z3.FuncDecl.get_name
+              |> Z3.Symbol.get_int
+              |> Utils.Uid.of_int
+            ) (Z3.Model.get_const_decls model)
+          in
+          Solution.Sat { value ; domain }
         | UNKNOWN -> Unknown
         | UNSATISFIABLE -> Unsat
       in

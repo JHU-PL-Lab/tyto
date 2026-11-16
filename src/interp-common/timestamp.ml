@@ -7,7 +7,7 @@ module type S = sig
   val equal : t -> t -> bool
   val compare : t -> t -> int
   val to_string : t -> string
-  val uid : t -> int
+  val uid : t -> Utils.Uid.t
 end
 
 module Simple : S = struct
@@ -31,6 +31,7 @@ module Simple : S = struct
 
   (* The standard library polymorphic hash has collisions after length 10, so we derive hash for uid *)
   let uid (Timestamp ls) =
+    Utils.Uid.of_int @@
     List.fold_left (fun acc a -> Hashtbl.hash (acc, a)) empty_hash ls
 end
 
@@ -81,7 +82,7 @@ module PerfectHash : S = struct
     let entry = Dynarray.get table time in
     String.concat "." (List.rev_map string_of_int entry.time)
 
-  let uid x = x
+  let uid = Utils.Uid.of_int
 end
 
 (* Select a default implementation *)

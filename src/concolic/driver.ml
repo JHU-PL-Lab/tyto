@@ -113,7 +113,7 @@ module Of_logger (Log : Utils.Logger.FULL with type B.a = Stat.t) : S with type 
           let run pgm =
             (* makes a new solver for this thread *)
             let module Z = Overlays.Typed_z3.Make () in
-            let solve = Smt.Solve.simplify (Smt.Solve.direct_solve (module Z)) in
+            let solve = Smt.Solve.main_solve (module Z) in
             let expr = Lang.Ast_tools.Utils.pgm_to_module pgm in
             Eval.c_loop ~options C.ceval solve expr
           in
