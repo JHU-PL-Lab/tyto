@@ -59,8 +59,9 @@ module Make (Make_tq : Target_queue.MAKE) (Logger : LOGGER) = struct
   (*
     Falls back on all-zero input feeder on first run and default (random) feeder after that.
   *)
-  let c_loop_body (e : Lang.Ast.Embedded.t) (eval : eval) (tq : Tq.t) (solve : K.t Smt.Solve.solver)
-    ~(max_tree_depth : int) ~(max_step : Interp_common.Step.t) : Status.Terminal.t =
+  let c_loop_body (e : Lang.Ast.Embedded.t) (eval : eval) (tq : Tq.t)
+    (solve : K.t Smt.Solve.solver) ~(max_tree_depth : int)
+    ~(max_step : Interp_common.Step.t) : Status.Terminal.t =
     let is_first_interp = ref true in
     let rec loop tq =
       let () = Utils.Time.yield_to_timer () in

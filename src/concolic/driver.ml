@@ -70,16 +70,14 @@ module Of_logger (Logger : Evaluator.LOGGER) : S = struct
       Lang.Ast.some_program ->
       Status.Terminal.t =
       fun ~options ~do_wrap ~do_type_splay program ->
-      if options.in_parallel
-      then
-        let pgms =
+      if options.in_parallel then
+        match
           Translate.Convert.some_program_to_many_emb program ~do_wrap ~do_type_splay
-        in
-        match pgms with
+        with
         | pgm :: [] ->
           (* Nothing to do in parallel if only one program *)
           test_with_timeout ~options @@ Lang.Ast_tools.Utils.pgm_to_module pgm
-        | _ ->
+        | pgms ->
           let run pgm =
             (* makes a new solver for this thread *)
             let module Z = Overlays.Typed_z3.Make () in
