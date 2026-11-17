@@ -4,7 +4,7 @@
 open Lang.Ast
 open Common
 
-type 'a res = ('a Value.v, Status.Eval.t) result
+type 'a res = ('a Effects.Value.v, Status.Eval.t) result
 
 let deferred_interp expr input_feeder ~max_step
   ~(default_input : 'a. 'a Interp_common.Input.Kind.t -> 'a)
