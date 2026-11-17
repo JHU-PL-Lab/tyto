@@ -27,7 +27,7 @@ module type S = sig
   end
 
   (* This is generative because a new solver contexts are made *)
-  module Make (Key : Smt.Symbol.KEY) (_ : Target_queue.MAKE) (_ : Evaluator.EVAL with type k := Key.t) () : DRIVER
+  module Make (_ : Target_queue.MAKE) (_ : Evaluator.EVAL) () : DRIVER
 
   module Eager : DRIVER
 

@@ -21,7 +21,7 @@ module type S = sig
     val eval : Status.Terminal.t Cmdliner.Cmd.t
   end
 
-  module Make (Key : Smt.Symbol.KEY) (_ : Target_queue.MAKE) (_ : Evaluator.EVAL with type k := Key.t) () : DRIVER
+  module Make (_ : Target_queue.MAKE) (_ : Evaluator.EVAL) () : DRIVER
 
   module Eager : DRIVER
 
@@ -53,10 +53,9 @@ module Of_logger (Log : Utils.Logger.FULL with type B.a = Stat.t) : S with type 
     val eval : Status.Terminal.t Cmdliner.Cmd.t
   end
 
-  module Make (Key : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
-    (C : Evaluator.EVAL with type k := Key.t) () : DRIVER = struct
+  module Make (Make_tq : Target_queue.MAKE) (C : Evaluator.EVAL) () : DRIVER = struct
 
-    module Eval = Evaluator.Make (Key) (Make_tq) (Log)
+    module Eval = Evaluator.Make (Make_tq) (Log)
 
     let solve = Smt.Solve.main_solve (module Overlays.Typed_z3.Default)
 
@@ -69,7 +68,7 @@ module Of_logger (Log : Utils.Logger.FULL with type B.a = Stat.t) : S with type 
     let test_with_timeout
       : options:Options.t -> Lang.Ast.Embedded.t -> Status.Terminal.t * tape
       = fun ~options prog ->
-      Eval.c_loop ~options C.ceval solve prog
+      Eval.c_loop ~options C.eval solve prog
 
     module Compute_result = struct
       open Log
@@ -115,7 +114,7 @@ module Of_logger (Log : Utils.Logger.FULL with type B.a = Stat.t) : S with type 
             let module Z = Overlays.Typed_z3.Make () in
             let solve = Smt.Solve.main_solve (module Z) in
             let expr = Lang.Ast_tools.Utils.pgm_to_module pgm in
-            Eval.c_loop ~options C.ceval solve expr
+            Eval.c_loop ~options C.eval solve expr
           in
           let status_m =
             Overlays.Computation_pool.process_all (module Compute_result) run pgms
@@ -185,12 +184,12 @@ module Of_logger (Log : Utils.Logger.FULL with type B.a = Stat.t) : S with type 
       status
   end
 
-  module Eager = Make (Interp_common.Step) (Target_queue.Make_BFS) (struct
-    let ceval = Eager.Main.eager_eval
+  module Eager = Make (Target_queue.Make_BFS) (struct
+    let eval = Eager.Main.eager_eval
   end) ()
 
-  module Deferred = Make (Interp_common.Timestamp) (Target_queue.Make_BFS) (struct
-    let ceval = Deferred.Main.deferred_eval
+  module Deferred = Make (Target_queue.Make_BFS) (struct
+    let eval = Deferred.Main.deferred_eval
   end) ()
 
   module Default = Eager

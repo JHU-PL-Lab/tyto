@@ -253,8 +253,3 @@ module Make (K : KEY) = struct
     run_safe x State.empty Value.Env.empty
 
 end
-
-include Make (struct
-  include Timestamp
-  let choose time _step = time
-end)

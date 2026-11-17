@@ -2,7 +2,11 @@
 include Concolic.Deferred.Dvalue.Make (Utils.Identity)
 
 module Without_symbols = Lang.Value.Embedded (Utils.Identity)
-module V = Concolic.Deferred.Effects.Value
+module Dmain = Concolic.Deferred.Main.Make (struct
+  include Interp_common.Timestamp
+  let choose time _step = time
+end)
+module V = Dmain.Effects.Value
 
 (*
   Values cannot be recursive, so this will terminate.

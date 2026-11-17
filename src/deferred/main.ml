@@ -9,7 +9,7 @@ let deval
   =
   let expr = Lang.Ast_tools.Utils.pgm_to_module pgm in
   match
-    Concolic.Deferred.Main.deferred_interp expr feeder
+    Value.Dmain.deferred_interp expr feeder
       ~max_step ~default_input:Interp_common.Input.Kind.zero
   with
   | Ok v, state, _ -> Ok (Value.of_concolic v state.symbol_map)

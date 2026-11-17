@@ -11,14 +11,13 @@ open Common
   - Or this type is parametrized by the log type, which would not be a monad but would be fully run and
     returned here. Then the loop just uses `tell` to collect that whole log in.
 *)
-type 'k eval = Lang.Ast.Embedded.t -> 'k Interp_common.Input_feeder.t
+type eval = Lang.Ast.Embedded.t -> Interp_common.Input_feeder.Stepped.t
   -> max_step:Interp_common.Step.t
   -> default_input:('a. 'a Interp_common.Input.Kind.t -> 'a)
-  -> Status.Eval.t * 'k Path.t * 'k Interp_common.Input_feeder.t
+  -> Status.Eval.t * Interp_common.Step.t Path.t * Interp_common.Input_feeder.Stepped.t
 
 module type EVAL = sig
-  type k
-  val ceval : k eval
+  val eval : eval
 end
 
 (*
@@ -27,10 +26,11 @@ end
   -------------
 *)
 
-module Make (K : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
+module Make (Make_tq : Target_queue.MAKE)
   (Log : Utils.Logger.FULL with type B.a = Stat.t) = struct
+  module K = Interp_common.Step
   module Tq = Make_tq (K)
-  module Feeder = Interp_common.Input_feeder.Make (K)
+  module Feeder = Interp_common.Input_feeder.Stepped
 
   open Log
 
@@ -43,7 +43,7 @@ module Make (K : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
       | (dir, k) :: tl ->
         let new_targets =
           List.map (fun e ->
-            (* FIXME: this is not safe for deferred evaluation *)
+            (* Note: filtering the feeder is only safe because the key is the step *)
             Target.make e acc_formulas (Feeder.less_than i_env k) target
           ) (Direction.negations dir)
         and ret_targets, ~is_pruned =
@@ -57,7 +57,7 @@ module Make (K : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
   (*
     Falls back on all-zero input feeder on first run and default (random) feeder after that.
   *)
-  let c_loop_body (e : Lang.Ast.Embedded.t) (eval : K.t eval) (tq : Tq.t) (solve : K.t Smt.Solve.solver)
+  let c_loop_body (e : Lang.Ast.Embedded.t) (eval : eval) (tq : Tq.t) (solve : K.t Smt.Solve.solver)
     ~(max_tree_depth : int) ~(max_step : Interp_common.Step.t) : Status.Terminal.t Log.m =
     let is_first_interp = ref true in
     let rec loop tq =
@@ -112,7 +112,7 @@ module Make (K : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
     let* () = log @@ Time (Total_time, Mtime.span t0 t1) in
     return res
 
-  let c_loop ~(options : Options.t) (eval : K.t eval) (solve : K.t Smt.Solve.solver)
+  let c_loop ~(options : Options.t) (eval : eval) (solve : K.t Smt.Solve.solver)
       (e : Lang.Ast.Embedded.t) : Status.Terminal.t Log.m =
     if options.is_random then Random.self_init () else Interp_common.Rand.reset ();
     let lifted_timeout t f =
@@ -137,5 +137,4 @@ module Make (K : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
         solve
         ~max_tree_depth:options.max_tree_depth
         ~max_step:(Step options.global_max_step)
-
 end
