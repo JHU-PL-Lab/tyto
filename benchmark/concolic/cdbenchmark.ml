@@ -1,9 +1,9 @@
 
 open Concolic.Common
 
-module Driver = Concolic.Driver.Of_logger (Utils.Logger.From_builder (Utils.Builder.List_builder (Stat)))
+module Driver = Concolic.Driver.Of_logger (Stat.Logger)
 
-type tape = Driver.tape
+type tape = Stat.t list
 
 module Basic_test = struct
   module Trial = struct
@@ -186,19 +186,27 @@ let run () =
   (* prepare channels to capture and discard all testing output *)
   let oc_null = Out_channel.open_bin "/dev/null" in
   Format.set_formatter_out_channel oc_null;
-  let runtest_eager pgm =
+  let handle f pgm =
+    let log = ref [] in
+    match f pgm with
+    | effect Stat.Log_stat s, k ->
+      log := s :: !log;
+      Effect.Deep.continue k ()
+    | x -> x, !log
+  in
+  let runtest_eager =
+    handle @@
     Driver.Eager.test_some_program
       ~options
       ~do_wrap:true        (* always wrap during benchmarking *)
       ~do_type_splay:No    (* never type splay during benchmarking *)
-      pgm
   in
-  let runtest_deferred pgm =
+  let runtest_deferred =
+    handle @@
     Driver.Deferred.test_some_program
       ~options
       ~do_wrap:true        (* always wrap during benchmarking *)
       ~do_type_splay:No    (* never type splay during benchmarking *)
-      pgm
   in
   let eager_results = of_dirs "Eager" n_trials dirs runtest_eager |> Result_table.add_average "Eager" in
   let deferred_results = of_dirs "Deferred" n_trials dirs runtest_deferred |> Result_table.add_average "Deferred" in

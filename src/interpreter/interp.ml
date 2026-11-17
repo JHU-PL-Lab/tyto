@@ -17,9 +17,9 @@ module Feeder = Interp_common.Input_feeder
 module Index_feeder = Feeder.Indexed
 
 module Input_log = struct
-  include Utils.Builder.List_builder (struct
-    type t = Interp_common.Input.t * Interp_common.Timestamp.t
-  end)
+  type t = (Interp_common.Input.t * Interp_common.Timestamp.t) list
+
+  let empty = []
 
   let to_sequence : t -> Interp_common.Input.t list = fun t ->
     List.rev_map fst t
@@ -107,7 +107,7 @@ module CPS_Error_M (Env : ENV) = struct
   let log_input (input : Interp_common.Input.t) : unit m =
     let* { State.time ; _ } = get in
     modify (fun (s : State.t) -> { s with n_inputs = s.n_inputs + 1 ;
-      log = Input_log.cons (input, time) s.log
+      log = (input, time) :: s.log
     })
 
   let n_inputs : int m =

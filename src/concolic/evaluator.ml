@@ -1,6 +1,10 @@
 
 open Common
 
+module type LOGGER = sig
+  val log : Stat.t -> unit
+end
+
 (*
   Evaluates an expression to a concolic path.
 
@@ -26,13 +30,10 @@ end
   -------------
 *)
 
-module Make (Make_tq : Target_queue.MAKE)
-  (Log : Utils.Logger.FULL with type B.a = Stat.t) = struct
+module Make (Make_tq : Target_queue.MAKE) (Logger : LOGGER) = struct
   module K = Interp_common.Step
   module Tq = Make_tq (K)
   module Feeder = Interp_common.Input_feeder.Stepped
-
-  open Log
 
   let adjacent_targets ~(max_tree_depth : int) (target : K.t Target.t)
       (final_path : K.t Path.t) (i_env : K.t Interp_common.Input_feeder.t)
@@ -59,22 +60,22 @@ module Make (Make_tq : Target_queue.MAKE)
     Falls back on all-zero input feeder on first run and default (random) feeder after that.
   *)
   let c_loop_body (e : Lang.Ast.Embedded.t) (eval : eval) (tq : Tq.t) (solve : K.t Smt.Solve.solver)
-    ~(max_tree_depth : int) ~(max_step : Interp_common.Step.t) : Status.Terminal.t Log.m =
+    ~(max_tree_depth : int) ~(max_step : Interp_common.Step.t) : Status.Terminal.t =
     let is_first_interp = ref true in
     let rec loop tq =
       let () = Utils.Time.yield_to_timer () in
       match Tq.pop tq with
       | Some (target, tq) -> begin
           let solve_span, solve_result = Utils.Time.time solve target.target_formula in
-          let* () = log @@ Time (Solve_time, solve_span) in
-          let* () = log @@ Count (N_solves, 1) in
+          let () = Logger.log @@ Time (Solve_time, solve_span) in
+          let () = Logger.log @@ Count (N_solves, 1) in
           let () = Utils.Time.yield_to_timer () in
           match solve_result with
           | Sat model -> loop_on_model target tq model
-          | Unknown -> let* a = loop tq in return (Status.min Unknown a)
+          | Unknown -> Status.min Unknown (loop tq)
           | Unsat -> loop tq
         end
-      | None -> return Status.Exhausted_full_tree
+      | None -> Status.Exhausted_full_tree
 
     and loop_on_model target tq model =
       let goal = Goal.of_solved_target (module Feeder) target model in
@@ -88,55 +89,46 @@ module Make (Make_tq : Target_queue.MAKE)
       let interp_span, (status, path, ienv) =
         Utils.Time.time (eval e ~max_step ~default_input) goal.assignments
       in
-      let* () = log @@ Time (Interp_time, interp_span) in
-      let* () = log @@ Count (N_interps, 1) in
+      let () = Logger.log @@ Time (Interp_time, interp_span) in
+      let () = Logger.log @@ Count (N_interps, 1) in
       let k ~reached_max_step =
         let targets, ~is_pruned =
           adjacent_targets target path ~max_tree_depth ienv
         in
-        let* a = loop (Tq.push_list tq targets) in
-        if is_pruned || reached_max_step
-        then return (Status.min Exhausted_pruned_tree a)
-        else return a
+        let a = loop (Tq.push_list tq targets) in
+        if is_pruned || reached_max_step then
+          Status.min Exhausted_pruned_tree a
+        else
+          a
       in
       match status with
       | (Found_abort _ | Type_mismatch _ | Unbound_variable _) as s ->
-        let* () = log @@ Depth (Target_depth, Target.path_n target) in
-        let* () = log @@ Depth (Error_depth, Path.length path) in
-        return s
+        let () = Logger.log @@ Depth (Target_depth, Target.path_n target) in
+        let () = Logger.log @@ Depth (Error_depth, Path.length path) in
+        s
       | Finished -> k ~reached_max_step:false (* TODO: track number of vanishes *)
       | Reached_max_step -> k ~reached_max_step:true
 
     in
-    let t0 = Mtime_clock.now () in
-    let* res = loop tq in
-    let t1 = Mtime_clock.now () in
-    let* () = log @@ Time (Total_time, Mtime.span t0 t1) in
-    return res
+    let span, res = Utils.Time.time loop tq in
+    let () = Logger.log @@ Time (Total_time, span) in
+    res
 
   let c_loop ~(options : Options.t) (eval : eval) (solve : K.t Smt.Solve.solver)
-      (e : Lang.Ast.Embedded.t) : Status.Terminal.t Log.m =
+      (e : Lang.Ast.Embedded.t) : Status.Terminal.t =
     if options.is_random then Random.self_init () else Interp_common.Rand.reset ();
-    let lifted_timeout t f =
-      let* x = Log.bind (return ()) (fun () ->
-          Log.return (Utils.Time.with_timeout t f)
-        )
-      in
-      match x with
-      | Ok (a, tape) ->
-        let* () = Log.tell tape in
-        return a
-      | Error _ ->
-        (* FIXME: missing the tape here *)
-        return Status.Timeout
+    let res =
+      Utils.Time.with_timeout options.global_timeout @@ fun () ->
+        let empty_tq = Tq.make options in
+        c_loop_body
+          e
+          eval
+          (Tq.push_list empty_tq [ Target.empty ])
+          solve
+          ~max_tree_depth:options.max_tree_depth
+          ~max_step:(Step options.global_max_step)
     in
-    lifted_timeout options.global_timeout @@ fun () ->
-      let empty_tq = Tq.make options in
-      c_loop_body
-        e
-        eval
-        (Tq.push_list empty_tq [ Target.empty ])
-        solve
-        ~max_tree_depth:options.max_tree_depth
-        ~max_step:(Step options.global_max_step)
+    match res with
+    | Ok a -> a
+    | Error _ -> Status.Timeout
 end

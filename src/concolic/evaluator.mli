@@ -1,6 +1,10 @@
 
 open Common
 
+module type LOGGER = sig
+  val log : Stat.t -> unit
+end
+
 type eval = Lang.Ast.Embedded.t -> Interp_common.Input_feeder.Stepped.t
   -> max_step:Interp_common.Step.t
   -> default_input:('a. 'a Interp_common.Input.Kind.t -> 'a)
@@ -18,10 +22,9 @@ end
   The parallel would be to pass in a log transformer.
   (But I should just pass in a made target queue and pull the k from that!)
 *)
-module Make : functor (_ : Target_queue.MAKE)
-  (Log : Utils.Logger.FULL with type B.a = Stat.t) -> sig
+module Make : functor (_ : Target_queue.MAKE) (_ : LOGGER) -> sig
   val c_loop : options:Options.t -> eval -> Interp_common.Step.t Smt.Solve.solver
-    -> Lang.Ast.Embedded.t -> Status.Terminal.t Log.m
+    -> Lang.Ast.Embedded.t -> Status.Terminal.t
   (** [c_loop ~options eval pgm] is the result of concolic looping on [pgm] using
-      the concolic evaluation function [eval]. *)
+      the concolic evaluation function [eval]. Performs effects from the logger. *)
 end

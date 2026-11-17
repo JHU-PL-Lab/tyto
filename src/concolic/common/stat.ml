@@ -20,12 +20,10 @@ type t =
   | Count of count_kind * int
   | Depth of depth_kind * int
 
-module Unit_builder : Utils.Builder.S with type a = t and type t = unit = struct
-  type a = t
-  type t = unit
-  let empty = ()
-  let cons _ () = ()
-  let combine () () = ()
+type _ Effect.t += Log_stat : t -> unit Effect.t
+
+module Logger = struct
+  let log stat = Effect.perform (Log_stat stat)
 end
 
 let sum_time (kind : time_kind) (ls : t list) : Mtime.Span.t =

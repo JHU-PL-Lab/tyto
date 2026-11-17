@@ -1,9 +1,9 @@
 
 open Concolic.Common
 
-module Driver = Concolic.Driver.Of_logger (Utils.Logger.From_builder (Utils.Builder.List_builder (Stat)))
+module Driver = Concolic.Driver.Of_logger (Stat.Logger)
 
-type tape = Driver.tape
+type tape = Stat.t list
 
 module Report_row (* : Latex_table.ROW *) = struct
   module Trial = struct
@@ -158,11 +158,18 @@ let run () =
       | `Eager -> Driver.Eager.test_some_program
       | `Deferred -> Driver.Eager.test_some_program
     in *)
-    Driver.Eager.test_some_program
-      ~options
-      ~do_wrap
-      ~do_type_splay
-      pgm
+    let log = ref [] in
+    match
+      Driver.Eager.test_some_program
+        ~options
+        ~do_wrap
+        ~do_type_splay
+        pgm
+    with
+    | effect Stat.Log_stat s, k ->
+      log := s :: !log;
+      Effect.Deep.continue k ()
+    | x -> x, !log
   in
   let tbl = Result_table.of_dirs n_trials dirs runtest in
   let times =
