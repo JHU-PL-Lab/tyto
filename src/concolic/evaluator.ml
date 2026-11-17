@@ -83,6 +83,7 @@ module Make (Make_tq : Target_queue.MAKE)
         else
           Interp_common.Input.Kind.rand
       in
+      let () = is_first_interp := false in
       let interp_span, (status, path, ienv) =
         Utils.Time.time (eval e ~max_step ~default_input) goal.assignments
       in
