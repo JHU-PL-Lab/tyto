@@ -1,8 +1,10 @@
 
 open Common
 
-type 'k eval = Lang.Ast.Embedded.t -> 'k Interp_common.Input_feeder.t ->
-  max_step:Interp_common.Step.t -> Status.Eval.t * 'k Path.t
+type 'k eval = Lang.Ast.Embedded.t -> 'k Interp_common.Input_feeder.t
+  -> max_step:Interp_common.Step.t
+  -> default_input:('a. 'a Interp_common.Input.Kind.t -> 'a)
+  -> Status.Eval.t * 'k Path.t * 'k Interp_common.Input_feeder.t
 (** ['k eval] is the type of functions that concolically evaluate programs to a path
     of concolic formulas keyed by ['k]. *)
 

@@ -39,6 +39,8 @@ module T : sig
     | Binop : ('a * 'a * 'b) Binop.t * ('a, 'k) t * ('a, 'k) t -> ('b, 'k) t
 
   include S with type ('a, 'k) t := ('a, 'k) t
+
+  val trivial : (bool, 'k) t
 end = struct
   type (_, 'k) t =
     | Const_int : int -> (int, 'k) t
@@ -71,6 +73,8 @@ end = struct
 
   let true_ = Const_bool true
   let false_ = Const_bool false
+
+  let trivial = true_
 
   let is_const (type a) (x : (a, 'k) t) : bool =
     match x with

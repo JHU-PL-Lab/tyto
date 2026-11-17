@@ -22,7 +22,7 @@ let interp =
   let feeder =
     match inputs with
     | [] -> None
-    | ls -> Some (Interp_common.Input_feeder.of_sequence ls)
+    | ls -> Some (Interp_common.Input_feeder.Indexed.of_sequence ls)
   in
   match pgm with
   | Lang.Ast.SomeProgram (BluejayLanguage, pgm) ->

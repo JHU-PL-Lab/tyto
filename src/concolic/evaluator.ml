@@ -12,7 +12,9 @@ open Common
     returned here. Then the loop just uses `tell` to collect that whole log in.
 *)
 type 'k eval = Lang.Ast.Embedded.t -> 'k Interp_common.Input_feeder.t
-  -> max_step:Interp_common.Step.t -> Status.Eval.t * 'k Path.t
+  -> max_step:Interp_common.Step.t
+  -> default_input:('a. 'a Interp_common.Input.Kind.t -> 'a)
+  -> Status.Eval.t * 'k Path.t * 'k Interp_common.Input_feeder.t
 
 module type EVAL = sig
   type k
@@ -25,24 +27,32 @@ end
   -------------
 *)
 
-let make_targets (target : 'k Target.t) (final_path : 'k Path.t)
-    ~(max_tree_depth : int) : 'k Target.t list * [ `Pruned of bool ] =
-  let stem = List.drop (Target.path_n target) (Path.to_dirs final_path) in
-  Utils.Etc.list_fold_until (fun (acc, target) dir ->
-      if Target.path_n target > max_tree_depth
-      then `Stop (acc, `Pruned true)
-      else `Continue (
-          List.map (fun e -> Target.cons e target) (Direction.negations dir)
-          @ acc
-        , Target.cons (Direction.to_formula dir) target
-        )
-    ) (fun (acc, _) -> acc, `Pruned false) ([], target) stem
-
 module Make (K : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
   (Log : Utils.Logger.FULL with type B.a = Stat.t) = struct
   module Tq = Make_tq (K)
+  module Feeder = Interp_common.Input_feeder.Make (K)
 
   open Log
+
+  let adjacent_targets ~(max_tree_depth : int) (target : K.t Target.t)
+      (final_path : K.t Path.t) (i_env : K.t Interp_common.Input_feeder.t)
+      : K.t Target.t list * is_pruned:bool =
+    let rec make acc_depth acc_formulas = function
+      | [] -> [], ~is_pruned:false
+      | _ when acc_depth > max_tree_depth -> [], ~is_pruned:true
+      | (dir, k) :: tl ->
+        let new_targets =
+          List.map (fun e ->
+            (* FIXME: this is not safe for deferred evaluation *)
+            Target.make e acc_formulas (Feeder.less_than i_env k) target
+          ) (Direction.negations dir)
+        and ret_targets, ~is_pruned =
+          make (acc_depth + 1) (Direction.to_formula dir :: acc_formulas) tl
+        in
+        List.rev_append new_targets ret_targets, ~is_pruned
+    in
+    let stem = List.drop target.path_n (Path.to_dirs final_path) in
+    make target.path_n target.all_formulas stem
 
   (*
     Falls back on all-zero input feeder on first run and default (random) feeder after that.
@@ -54,7 +64,7 @@ module Make (K : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
       let () = Utils.Time.yield_to_timer () in
       match Tq.pop tq with
       | Some (target, tq) -> begin
-          let solve_span, solve_result = Utils.Time.time solve (Target.to_formula target) in
+          let solve_span, solve_result = Utils.Time.time solve target.target_formula in
           let* () = log @@ Time (Solve_time, solve_span) in
           let* () = log @@ Count (N_solves, 1) in
           let () = Utils.Time.yield_to_timer () in
@@ -66,21 +76,22 @@ module Make (K : Smt.Symbol.KEY) (Make_tq : Target_queue.MAKE)
       | None -> return Status.Exhausted_full_tree
 
     and loop_on_model target tq model =
-      let feeder =
-        Interp_common.Input_feeder.of_smt_model
-          model
-          ~uid:K.uid
-          ~fallback_feeder:(
-            if !is_first_interp
-            then (is_first_interp := false; Interp_common.Input_feeder.zero)
-            else Interp_common.Input_feeder.default
-          )
+      let goal = Goal.of_solved_target (module Feeder) target model in
+      let default_input =
+        if !is_first_interp then
+          Interp_common.Input.Kind.zero
+        else
+          Interp_common.Input.Kind.rand
       in
-      let interp_span, (status, path) = Utils.Time.time (eval e ~max_step) feeder in
+      let interp_span, (status, path, ienv) =
+        Utils.Time.time (eval e ~max_step ~default_input) goal.assignments
+      in
       let* () = log @@ Time (Interp_time, interp_span) in
       let* () = log @@ Count (N_interps, 1) in
       let k ~reached_max_step =
-        let targets, `Pruned is_pruned = make_targets target path ~max_tree_depth in
+        let targets, ~is_pruned =
+          adjacent_targets target path ~max_tree_depth ienv
+        in
         let* a = loop (Tq.push_list tq targets) in
         if is_pruned || reached_max_step
         then return (Status.min Exhausted_pruned_tree a)

@@ -49,9 +49,8 @@ val incr_step : max_step:Interp_common.Step.t -> unit m
 val push_branch : Interp_common.Step.t Direction.t -> unit m
 (** [push_branch dir] pushes the [dir] onto the stateful path. *)
 
-val get_input : (Interp_common.Step.t -> 'a Interp_common.Key.Stepkey.t) -> Interp_common.Step.t Interp_common.Input_feeder.t -> Value.t m
-(** [get_input make_key feeder] is the value from the [feeder] associated with the key
-    made from the current step count. *)
+val get_input : 'a Interp_common.Input.Kind.t -> default:'a
+  -> Interp_common.Step.t Interp_common.Input_feeder.t -> Value.t m
 
-val run : 'a m -> Status.Eval.t * Interp_common.Step.t Path.t
+val run : 'a m -> Status.Eval.t * Interp_common.Step.t Path.t * Interp_common.Input_feeder.Stepped.t
 (** [run x] is the result of the monad run on an empty initial state and environment. *)

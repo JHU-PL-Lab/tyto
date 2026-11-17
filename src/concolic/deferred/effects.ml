@@ -10,7 +10,7 @@ open Common
 
 type k = Interp_common.Timestamp.t
 
-module Feeder = Input_feeder.Make (Timestamp)
+module Feeder = Input_feeder.Timestamped
 
 module State = struct
   (* This is getting a little long and will be expensive on every update
@@ -28,7 +28,7 @@ module State = struct
     ; pending_proofs : Value.Pending_proofs.t
     ; n_stern_steps : Step.t
     ; path : k Path.t
-    ; inputs : Interpreter.Interp.Input_log.t }
+    ; inputs : Feeder.t }
 
   let empty : t =
     { time = Timestamp.initial
@@ -36,7 +36,7 @@ module State = struct
     ; pending_proofs = Value.Pending_proofs.empty
     ; n_stern_steps = Step.zero
     ; path = Path.empty
-    ; inputs = [] }
+    ; inputs = Input_feeder.empty }
 
   let remove_greater_symbols (s : t) : t =
     { s with
@@ -47,8 +47,7 @@ module State = struct
     { s with n_stern_steps = Step.next s.n_stern_steps }
 
   let inputs ({ inputs ; _ } : t) : Interp_common.Input.t list =
-    List.sort (fun (_, t1) (_, t2) -> Interp_common.Timestamp.compare t1 t2) inputs
-    |> List.map fst
+    Feeder.image inputs
 end
 
 include Interp_common.Monad
@@ -187,9 +186,10 @@ let vanish : 'a m =
   fail_and_filter (fun _ -> Status.Finished)
 
 let push_branch (dir : k Direction.t) : unit m =
-  if Smt.Formula.is_const @@ Direction.to_formula dir
-  then return ()
-  else modify (fun (s : State.t) -> { s with path = Path.cons dir s.path })
+  if Smt.Formula.is_const @@ Direction.to_formula dir then
+    return ()
+  else
+    modify (fun (s : State.t) -> { s with path = Path.cons dir s.time s.path })
 
 let[@inline always] defer (body : Lang.Ast.Embedded.t) : Value.t m =
   { run =
@@ -201,21 +201,27 @@ let[@inline always] defer (body : Lang.Ast.Embedded.t) : Value.t m =
       } step
   }
 
-let get_input (type a) (make_key : Timestamp.t -> a Key.Timekey.t)
+let get_input (type a) (kind : a Input.Kind.t) ~(default : a)
     (feeder : Timestamp.t Input_feeder.t) : Value.t m =
   let* state = get in
-  let key = make_key state.State.time in
-  let v = feeder.get key in
-  match key with
-  | I k ->
+  let k = state.State.time in
+  let v =
+    match Feeder.find kind k feeder with
+    | Some a -> a
+    | None -> default
+  in
+  match kind with
+  | KInt ->
     let* () = modify (fun (s : State.t) ->
-        { s with inputs = (I v, s.time) :: s.inputs ; time = Timestamp.increment s.time }
+        { s with inputs = Feeder.add KInt k v s.inputs
+        ; time = Timestamp.increment s.time }
       )
     in
     return @@ Value.symbolic_int v k
-  | B k ->
+  | KBool ->
     let* () = modify (fun (s : State.t) ->
-        { s with inputs = (B v, s.time) :: s.inputs ; time = Timestamp.increment s.time }
+        { s with inputs = Feeder.add KBool k v s.inputs
+        ; time = Timestamp.increment s.time }
       )
     in
     return @@ Value.symbolic_bool v k

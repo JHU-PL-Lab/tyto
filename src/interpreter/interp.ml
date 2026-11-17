@@ -14,6 +14,7 @@ module V = Lang.Value.Make (Lang.Value.Map_store) (Lang.Value.Lazy_cell) (Utils.
 open V
 
 module Feeder = Interp_common.Input_feeder
+module Index_feeder = Feeder.Indexed
 
 module Input_log = struct
   include Utils.Builder.List_builder (struct
@@ -23,25 +24,14 @@ module Input_log = struct
   let to_sequence : t -> Interp_common.Input.t list = fun t ->
     List.rev_map fst t
 
-  let to_time_feeder : t -> Interp_common.Timestamp.t Feeder.t =
-    fun t ->
-    let module Map = Interp_common.Timestamp.Map in
-    let m_ints, m_bools =
-      List.fold_left (fun (mi, mb) (input, t) ->
-          match input with
-          | Interp_common.Input.I i -> (Map.add t i mi, mb)
-          | Interp_common.Input.B b -> (mi, Map.add t b mb)
-        ) (Map.empty, Map.empty) t
-    in
-    let get : type a. a Interp_common.Key.Timekey.t -> a = fun key ->
-      let a_opt : a option =
-        match key with
-        | I k -> Map.find_opt k m_ints
-        | B k -> Map.find_opt k m_bools
-      in
-      Option.value a_opt ~default:(Interp_common.Input_feeder.zero.get key)
-    in
-    { get }
+  let to_time_feeder : t -> Interp_common.Timestamp.t Feeder.t = fun t ->
+    List.fold_left (fun acc (input, t) ->
+      match input with
+      | Interp_common.Input.IInt i ->
+        Feeder.Timestamped.add Interp_common.Input.Kind.KInt t i acc
+      | IBool b ->
+        Feeder.Timestamped.add Interp_common.Input.Kind.KBool t b acc
+    ) Feeder.Timestamped.empty t
 end
 
 module type ENV = sig
@@ -130,10 +120,14 @@ module CPS_Error_M (Env : ENV) = struct
     let* () = modify (fun s' -> { s' with State.time = s.State.time }) in
     return a
 
-  let get_input (type a) (fkey : int -> a Interp_common.Key.Indexkey.t)
+  let get_input (type a) (kind : a Interp_common.Input.Kind.t)
       (pack : a -> Interp_common.Input.t) (feeder : int Feeder.t) : a m =
     let* n = n_inputs in
-    let a = feeder.get (fkey n) in
+    let a : a =
+      match Index_feeder.find kind n feeder with
+      | None -> Interp_common.Input.Kind.zero kind
+      | Some a -> a
+    in
     let* () = log_input (pack a) in
     let* () = incr_time in
     return a
@@ -176,13 +170,13 @@ let eval_exp (type a) (e : a Expr.t) (feeder : int Feeder.t) : a V.t * Input_log
       VMultiArgFunClosure { params ; closure = { body ; env = lazy env } }
     (* inputs *)
     | EInput | EPick_i ->
-      let* i = get_input Interp_common.Key.Indexkey.int_ (fun i -> Interp_common.Input.I i) feeder in
+      let* i = get_input KInt (fun i -> Interp_common.Input.IInt i) feeder in
       return (VInt i)
     | EPick_b ->
-      let* b = get_input Interp_common.Key.Indexkey.bool_ (fun b -> Interp_common.Input.B b) feeder in
+      let* b = get_input KBool (fun b -> Interp_common.Input.IBool b) feeder in
       return (VBool b)
     | EAbstractType ->
-      let* i = get_input Interp_common.Key.Indexkey.int_ (fun i -> Interp_common.Input.I i) feeder in
+      let* i = get_input KInt (fun i -> Interp_common.Input.IInt i) feeder in
       return (VAbstractType i)
     (* deferred expressions *)
     | EDefer e -> (* eagerly evaluate, but still track time correctly *)
@@ -491,7 +485,7 @@ let eval_exp (type a) (e : a Expr.t) (feeder : int Feeder.t) : a V.t * Input_log
 
 let eval_pgm
     (type a)
-    ?(feeder : int Feeder.t = Interp_common.Input_feeder.zero)
+    ?(feeder : int Feeder.t = Index_feeder.empty)
     (pgm : a Program.t)
   : a V.t
   =
@@ -499,7 +493,7 @@ let eval_pgm
 
 let eval_pgm_to_time_feeder
     (type a)
-    ?(feeder : int Feeder.t = Interp_common.Input_feeder.zero)
+    ?(feeder : int Feeder.t = Index_feeder.empty)
     (pgm : a Program.t)
   : a V.t * Interp_common.Timestamp.t Feeder.t
   =

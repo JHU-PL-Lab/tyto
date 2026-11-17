@@ -14,7 +14,8 @@ let eager_eval
     (expr : Embedded.t)
     (input_feeder : Interp_common.Step.t Interp_common.Input_feeder.t)
     ~(max_step : Interp_common.Step.t)
-  : Status.Eval.t * Interp_common.Step.t Path.t
+    ~(default_input : 'a. 'a Interp_common.Input.Kind.t -> 'a)
+  : Status.Eval.t * Interp_common.Step.t Path.t * Interp_common.Input_feeder.Stepped.t
   =
   let open Effects in
 
@@ -159,8 +160,8 @@ let eager_eval
         | v -> type_mismatch @@ Error_msg.case_non_int v
       end
     (* Inputs *)
-    | EPick_i -> get_input Interp_common.Key.Stepkey.int_ input_feeder
-    | EPick_b -> get_input Interp_common.Key.Stepkey.bool_ input_feeder
+    | EPick_i -> get_input KInt ~default:(default_input KInt) input_feeder
+    | EPick_b -> get_input KBool ~default:(default_input KBool) input_feeder
     (* Failure cases *)
     | EAbort msg -> abort msg
     | EVanish () -> vanish

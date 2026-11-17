@@ -5,22 +5,29 @@ let uid = Utils.Counter.create ()
 type 'k t =
   { path_n : int
   ; uniq_id : int
-  ; formulas : (bool, 'k) Smt.Formula.t list }
+  ; i_env : 'k Interp_common.Input_feeder.t
+  ; target_formula : (bool, 'k) Smt.Formula.t
+  ; all_formulas : (bool, 'k) Smt.Formula.t list }
 
 let initial_id = Utils.Counter.next uid
 
 let empty : 'k t =
   { path_n = 0
   ; uniq_id = initial_id
-  ; formulas = [] }
+  ; i_env = Interp_common.Input_feeder.empty
+  ; target_formula = Smt.Formula.trivial
+  ; all_formulas = []
+  }
 
-let cons (formula : (bool, 'k) Smt.Formula.t) (target : 'k t) : 'k t =
-  { path_n = target.path_n + 1
-  ; uniq_id = Utils.Counter.next uid
-  ; formulas = formula :: target.formulas }
-
-let to_formula ( { formulas ; _ } : 'k t) : (bool, 'k) Smt.Formula.t =
-  Smt.Formula.and_ formulas
+let make (last_formula : (bool, 'k) Smt.Formula.t)
+  (other_formulas : (bool, 'k) Smt.Formula.t list)
+  (i_env : 'k Interp_common.Input_feeder.t)
+  (old_target : 'k t) : 'k t =
+  let target_formula = Smt.Formula.scc last_formula ~wrt:other_formulas
+  and all_formulas = last_formula :: other_formulas
+  and uniq_id = Utils.Counter.next uid
+  and path_n = old_target.path_n + 1 in
+  { target_formula ; all_formulas ; i_env ; uniq_id ; path_n }
 
 (*
   SUPER IMPORTANT NOTE:

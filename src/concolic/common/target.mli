@@ -13,23 +13,23 @@
     if this property is violated.
 *)
 
-type 'k t
+type 'k t =
+  { path_n : int
+  ; uniq_id : int
+  ; i_env : 'k Interp_common.Input_feeder.t
+  ; target_formula : (bool, 'k) Smt.Formula.t
+  ; all_formulas : (bool, 'k) Smt.Formula.t list }
 
 val empty : 'k t
 (** [empty] is the target with no formulas. i.e. it is unconstrained. *)
 
-val cons : (bool, 'k) Smt.Formula.t -> 'k t -> 'k t
-(** [cons formula t] is a new target, with a new unique id used for comparison,
-    made from pushing the [formula] to the given target [t]. *)
+val make : (bool, 'k) Smt.Formula.t -> (bool, 'k) Smt.Formula.t list ->
+  'k Interp_common.Input_feeder.t -> 'k t -> 'k t
 
 val compare : 'k t -> 'k t -> int
 (** [compare a b] uses the unique identifiers in [a] and [b] to compare,
     and hence only literal equality (of memory location) is sufficient
     for [compare a b] to be [0]. *)
-
-val to_formula : 'k t -> (bool, 'k) Smt.Formula.t
-(** [to_formula t] is the conjuection of the constraints to solve in order to
-  realize [t]. *)
 
 val path_n : 'k t -> int
 (** [path_n target] is the length of the path to the [target]. *)

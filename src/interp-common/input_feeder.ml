@@ -1,64 +1,93 @@
 
-type 'key t = { get : 'a. ('a, 'key) Key.t -> 'a }[@@unboxed]
-
-let zero : 'key t =
-  let get (type a) (key : (a, 'key) Key.t) : a =
-    match key with
-    | I _ -> 0
-    | B _ -> false
-  in
-  { get }
-
-let default : 'key t =
-  let get (type a) (key : (a, 'key) Key.t) : a =
-    match key with
-    | I _ -> Rand.int_incl (-10) 10
-    | B _ -> Rand.bool ()
-  in
-  { get }
-
-let of_smt_model ?(fallback_feeder : 'k t = default) (model : 'k Smt.Model.t)
-    ~(uid : 'k -> Utils.Uid.t) : 'k t =
-  let get (type a) (key : (a, 'k) Key.t) : a =
-    let s : (a, 'k) Smt.Symbol.t =
-      match key with
-      | I k -> Smt.Symbol.make_int k uid
-      | B k -> Smt.Symbol.make_bool k uid
-    in
-    match model.value s with
-    | Some v -> v
-    | None -> fallback_feeder.get key
-  in
-  { get }
-
-module IntMap = Baby.W.Map.Make (Int)
-
 (*
-  Feeds using index in the sequence
+  We will use a zipper map that has fast reads and writes nearest the last read
+  or write because inputs are very often read and written in increasing order.
+  Inputs are keyed by how many steps the program has taken, which is increasing.
+  It only takes exactly one traversal to reset at the start of the program, and
+  otherwise the actions are cheap.
 *)
-let of_sequence (ls : Input.t list) : int t =
-  let m_ints, m_bools, _ =
-    List.fold_left (fun (mi, mb, n) input ->
-      match input with
-      | Input.I i -> (IntMap.add n i mi, mb, n + 1)
-      | Input.B b -> (mi, IntMap.add n b mb, n + 1)
-    ) (IntMap.empty, IntMap.empty, 0) ls
-  in
-  let get : type a. (a, int) Key.t -> a = fun key ->
-    let a_opt : a option =
-      match key with
-      | I k -> IntMap.find_opt k m_ints
-      | B k -> IntMap.find_opt k m_bools
-    in
-    Option.value a_opt ~default:(zero.get key)
-  in
-  { get }
+module UMap = Utils.Zipper_map.Make (Utils.Uid)
 
-module Make (K : Utils.Comparable.P) = struct
+(* phantom key type *)
+type 'k t = Input.t UMap.t
+
+let empty : 'k. 'k t = UMap.empty ()
+
+module type S = sig
+  module K : Smt.Symbol.KEY
+  type nonrec t = K.t t
+  val empty : t
+  val find : 'a Input.Kind.t -> K.t -> t -> 'a option
+  val add : 'a Input.Kind.t -> K.t -> 'a -> t -> t
+  val extend : t -> with_:t -> t
+  val to_string : t -> string
+  val of_model : K.t Smt.Model.t -> t
+  val image : t -> Input.t list
+  val less_than : t -> K.t -> t
+end
+
+module Make (K : Smt.Symbol.KEY) = struct
+  module K = K
   type nonrec t = K.t t
 
-  let zero : t = zero
-  let default : t = default
+  let empty : t = UMap.empty ()
 
-  module Key = Key.Make (K)
+  (* Propagates failing extraction. Is None if the key doesn't exist at all *)
+  let find (type a) (kind : a Input.Kind.t) (key : K.t) (m : t) : a option =
+    Option.map (Input.extract_exn kind) (UMap.find_opt (K.uid key) m)
+
+  let add (type a) (kind : a Input.Kind.t) (key : K.t) (input : a) (m : t) : t =
+    UMap.add (K.uid key) (
+      match kind with
+      | Input.Kind.KBool -> Input.IBool input
+      | KInt -> IInt input
+    ) m
+
+  let extend = UMap.extend
+
+  let to_string (m : t) : string =
+    let make_mapping (uid, input) =
+      Printf.sprintf "%d |-> %s" (Utils.Uid.to_int uid) (Input.to_string input)
+    in
+    let body =
+      m
+      |> UMap.to_list
+      |> List.map make_mapping
+      |> String.concat " ; "
+    in
+    Printf.sprintf "{ %s }" body
+
+  let of_model (model : K.t Smt.Model.t) : t =
+    List.fold_left (fun acc uid ->
+      let v =
+        match model.value (I uid) with
+        | Some i -> Input.IInt i
+        | None -> IBool (Option.get (model.value (B uid)))
+      in
+      UMap.add uid v acc
+    ) empty model.domain
+
+  let image m =
+    List.map snd (UMap.to_list m)
+
+  let less_than m k =
+    UMap.less_than m (K.uid k)
 end
+
+module Timestamped = Make (Timestamp)
+
+module Indexed = struct
+  include Make (Index)
+
+  let of_sequence ls =
+    fst @@
+    List.fold_left (fun (acc, idx) input ->
+      match input with
+      | Input.IInt i ->
+        add Input.Kind.KInt idx i acc, idx + 1
+      | IBool b ->
+        add KBool idx b acc, idx + 1
+    ) (empty, 0) ls
+end
+
+module Stepped = Make (Step)

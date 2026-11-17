@@ -3,12 +3,15 @@ let max_step = Interp_common.Step.Step (1 lsl 20)
 
 (* TODO: should probably differentiate between vanish and other errors *)
 let deval
-  ?(feeder : Interp_common.Timestamp.t Interp_common.Input_feeder.t = Interp_common.Input_feeder.zero)
+  ?(feeder : Interp_common.Input_feeder.Timestamped.t = Interp_common.Input_feeder.empty)
   (pgm : Lang.Ast.Embedded.pgm)
   : (Value.Without_symbols.t, Err.t) result
   =
   let expr = Lang.Ast_tools.Utils.pgm_to_module pgm in
-  match Concolic.Deferred.Main.deferred_interp expr feeder ~max_step with
+  match
+    Concolic.Deferred.Main.deferred_interp expr feeder
+      ~max_step ~default_input:Interp_common.Input.Kind.zero
+  with
   | Ok v, state, _ -> Ok (Value.of_concolic v state.symbol_map)
   | Error status, _, _ -> Error (
     match status with
@@ -33,7 +36,7 @@ let deval_with_input_sequence
     Format.set_formatter_out_channel oc_null;
     let _, feeder =
       Interpreter.Interp.eval_pgm_to_time_feeder
-        ~feeder:(Interp_common.Input_feeder.of_sequence inputs)
+        ~feeder:(Interp_common.Input_feeder.Indexed.of_sequence inputs)
         pgm
     in
     Format.set_formatter_out_channel Out_channel.stdout;

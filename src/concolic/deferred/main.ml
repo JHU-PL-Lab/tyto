@@ -6,7 +6,9 @@ open Common
 
 type 'a res = ('a Value.v, Status.Eval.t) result
 
-let deferred_interp expr input_feeder ~max_step =
+let deferred_interp expr input_feeder ~max_step
+  ~(default_input : 'a. 'a Interp_common.Input.Kind.t -> 'a)
+  =
   let open Effects in
 
   let rec eval ?(is_stern : bool = false) (expr : Embedded.t) : Value.t m =
@@ -19,8 +21,8 @@ let deferred_interp expr input_feeder ~max_step =
     | EBool b -> return @@ VBool (b, Smt.Formula.const_bool b)
     | EVar id -> fetch id
     (* inputs *)
-    | EPick_i -> get_input Interp_common.Key.Timekey.int_ input_feeder
-    | EPick_b -> get_input Interp_common.Key.Timekey.bool_ input_feeder
+    | EPick_i -> get_input KInt ~default:(default_input KInt) input_feeder
+    | EPick_b -> get_input KBool ~default:(default_input KBool) input_feeder
     (* operations *)
     | EBinop { left ; binop ; right } -> begin
         let* vleft = stern_eval left in
@@ -213,7 +215,8 @@ let deferred_interp expr input_feeder ~max_step =
 
   run (begin_stern_loop expr)
 
-let deferred_eval expr input_feeder ~max_step =
-  match deferred_interp expr input_feeder ~max_step with
-  | Ok _, state, _ -> Status.Finished, state.path
-  | Error e, state, _ -> e, state.path
+let deferred_eval expr input_feeder ~max_step
+  ~(default_input : 'a. 'a Interp_common.Input.Kind.t -> 'a) =
+  match deferred_interp expr input_feeder ~max_step ~default_input with
+  | Ok _, state, _ -> Status.Finished, state.path, state.inputs
+  | Error e, state, _ -> e, state.path, state.inputs
