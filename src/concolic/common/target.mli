@@ -24,7 +24,7 @@ val empty : 'k t
 (** [empty] is the target with no formulas. i.e. it is unconstrained. *)
 
 val make : (bool, 'k) Smt.Formula.t -> (bool, 'k) Smt.Formula.t list ->
-  'k Interp_common.Input_feeder.t -> 'k t -> 'k t
+  'k Interp_common.Input_feeder.t -> priority:int -> 'k t
 
 val compare : 'k t -> 'k t -> int
 (** [compare a b] uses the unique identifiers in [a] and [b] to compare,

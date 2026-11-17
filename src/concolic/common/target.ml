@@ -22,11 +22,11 @@ let empty : 'k t =
 let make (last_formula : (bool, 'k) Smt.Formula.t)
   (other_formulas : (bool, 'k) Smt.Formula.t list)
   (i_env : 'k Interp_common.Input_feeder.t)
-  (old_target : 'k t) : 'k t =
+  ~(priority : int) : 'k t =
   let target_formula = Smt.Formula.scc last_formula ~wrt:other_formulas
   and all_formulas = last_formula :: other_formulas
   and uniq_id = Utils.Counter.next uid
-  and path_n = old_target.path_n + 1 in
+  and path_n = priority in
   { target_formula ; all_formulas ; i_env ; uniq_id ; path_n }
 
 (*

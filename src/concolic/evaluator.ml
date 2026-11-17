@@ -41,13 +41,14 @@ module Make (Make_tq : Target_queue.MAKE)
       | [] -> [], ~is_pruned:false
       | _ when acc_depth > max_tree_depth -> [], ~is_pruned:true
       | (dir, k) :: tl ->
+        let priority = acc_depth + 1 in
         let new_targets =
           List.map (fun e ->
             (* Note: filtering the feeder is only safe because the key is the step *)
-            Target.make e acc_formulas (Feeder.less_than i_env k) target
+            Target.make e acc_formulas (Feeder.less_than i_env k) ~priority
           ) (Direction.negations dir)
         and ret_targets, ~is_pruned =
-          make (acc_depth + 1) (Direction.to_formula dir :: acc_formulas) tl
+          make priority (Direction.to_formula dir :: acc_formulas) tl
         in
         List.rev_append new_targets ret_targets, ~is_pruned
     in
