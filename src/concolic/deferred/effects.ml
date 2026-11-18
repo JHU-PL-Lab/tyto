@@ -120,14 +120,15 @@ module Make (K : KEY) = struct
           step
           closure.env
           ~reject ~accept:(fun v final_state final_step ->
-            accept v { final_state with
-              time = state.time (* Restore original time now that f is done. *)
-            ; pending_proofs =
+            let time = state.time (* Restore original time now that f is done. *)
+            and pending_proofs =
               Time_map.union (fun _ _ _ -> failwith "Invariant failure: duplicate timestamp when adding back hidden symbols")
                 final_state.pending_proofs (* Keep all the proofs after f finished running ... *)
                 to_add_back (* ... and put back the proofs we hid from f *)
-            ; symbol_map = Time_map.add t v final_state.symbol_map
-            } final_step
+            and symbol_map =
+              Time_map.add t v final_state.symbol_map
+            in
+            accept v { final_state with time ; pending_proofs ; symbol_map } final_step
           )
     }
 
@@ -165,13 +166,14 @@ module Make (K : KEY) = struct
   let[@inline always] optionally_map_some_deferred_proof
       (f : Lang.Ast.Embedded.t -> Value.whnf m) : unit m =
     { run = fun ~reject ~accept state step env ->
-      if Step.to_int state.n_stern_steps land 31 = 0 (* quick way to check it is 0 mod 32 *)
+      if Step.to_int state.n_stern_steps land 31 = 0 (* quick way to check it is 0 (mod 32) *)
       && not (Time_map.is_empty state.pending_proofs) (* ... and there is some pending proof we can work on *)
       then
         let (t, _) = Time_map.choose state.pending_proofs in
-        (map_deferred_proof (VSymbol t) f).run ~reject ~accept:(fun _ final_state final_step ->
-          accept () final_state final_step
-        ) state step env
+        (map_deferred_proof (VSymbol t) f).run ~reject
+          ~accept:(fun _ final_state final_step ->
+            accept () final_state final_step
+          ) state step env
       else
         accept () state step
     }

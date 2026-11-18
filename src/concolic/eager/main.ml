@@ -60,16 +60,15 @@ let eager_eval
       return @@ VRecord value_record_body
     | EModule stmt_ls ->
       let* module_body =
-        let rec fold_stmts acc_m = function
-          | [] -> acc_m
+        let rec fold_stmts acc = function
+          | [] -> return acc
           | SUntyped { var ; defn } :: tl ->
-            let* acc = acc_m in
             let* v = eval defn in
             local (Env.add var v) (
-              fold_stmts (return @@ RecordLabel.Map.add (RecordLabel.RecordLabel var) v acc) tl
+              fold_stmts (RecordLabel.Map.add (RecordLabel.RecordLabel var) v acc) tl
             )
         in
-        fold_stmts (return RecordLabel.Map.empty) stmt_ls
+        fold_stmts RecordLabel.Map.empty stmt_ls
       in
       return @@ VModule module_body
     | EMatch { subject ; patterns } -> begin (* Note: there cannot be symbolic branching on match *)

@@ -14,9 +14,8 @@ module Make (K : Effects.KEY) = struct
     =
     let open Effects in
 
-    let rec eval ?(is_stern : bool = false) (expr : Embedded.t) : Value.t m =
+    let rec eval (expr : Embedded.t) : Value.t m =
       let open Value in
-      let k = eval ~is_stern in
       let* () = incr_step ~max_step in
       match expr with
       | EUnit -> return VUnit
@@ -27,7 +26,7 @@ module Make (K : Effects.KEY) = struct
       | EPick_i -> get_input KInt ~default:(default_input KInt) input_feeder
       | EPick_b -> get_input KBool ~default:(default_input KBool) input_feeder
       (* operations *)
-      | EBinop { left ; binop ; right } -> begin
+      | EBinop { left ; binop ; right } ->
           let* vleft = stern_eval left in
           let* vright = stern_eval right in
           let k f e1 e2 op =
@@ -36,7 +35,7 @@ module Make (K : Effects.KEY) = struct
           let open Smt.Binop in
           let v_int n = fun e -> VInt (n, e) in
           let v_bool b = fun e -> VBool (b, e) in
-          match binop, vleft, vright with
+          begin match binop, vleft, vright with
           | BPlus        , VInt (n1, e1)  , VInt (n2, e2)              -> k (v_int (n1 + n2)) e1 e2 Plus
           | BMinus       , VInt (n1, e1)  , VInt (n2, e2)              -> k (v_int (n1 - n2)) e1 e2 Minus
           | BTimes       , VInt (n1, e1)  , VInt (n2, e2)              -> k (v_int (n1 * n2)) e1 e2 Times
@@ -52,27 +51,27 @@ module Make (K : Effects.KEY) = struct
           | BOr          , VBool (b1, e1) , VBool (b2, e2)             -> k (v_bool (b1 || b2)) e1 e2 Or
           | BAnd         , VBool (b1, e1) , VBool (b2, e2)             -> return @@ VBool (b1 && b2, Smt.Formula.and_ [ e1 ; e2 ])
           | _ -> type_mismatch @@ Error_msg.bad_binop vleft binop vright
-        end
-      | ENot expr -> begin
+          end
+      | ENot expr ->
           let* v = stern_eval expr in
-          match v with
+          begin match v with
           | VBool (b, e_b) -> return @@ VBool (not b, Smt.Formula.not_ e_b)
           | v -> type_mismatch @@ Error_msg.bad_not v
-        end
-      | EProject { record ; label } -> begin
+          end
+      | EProject { record ; label } ->
           let* v = stern_eval record in
-          match v with
-          | VRecord body | VModule body -> begin
-              match RecordLabel.Map.find_opt label body with
+          begin match v with
+          | VRecord body | VModule body ->
+              begin match RecordLabel.Map.find_opt label body with
               | Some v -> return (Value.cast_up v)
               | None -> type_mismatch @@ Error_msg.project_missing_label label v
-            end
+              end
           | v -> type_mismatch @@ Error_msg.project_non_record label v
-        end
+          end
       (* control flow / branches *)
-      | EMatch { subject ; patterns  } -> begin
+      | EMatch { subject ; patterns  } ->
           let* v = stern_eval subject in
-          match
+          begin match
             List.find_map (fun (pat, body) ->
                 match Value.matches v pat with
                 | `Matches -> Some (body, fun x -> x)
@@ -80,37 +79,45 @@ module Make (K : Effects.KEY) = struct
                 | `No_match -> None
               ) patterns
           with
-          | Some (e, f) -> local f (k e)
+          | Some (e, f) -> local f (eval e)
           | None -> type_mismatch @@ Error_msg.pattern_not_found patterns v
-        end
-      | EIf { cond ; true_body ; false_body } -> begin
+          end
+      | EIf { cond ; true_body ; false_body } ->
           let* v = stern_eval cond in
-          match v with
+          begin match v with
           | VBool (b, e_b) ->
             (* let* () = incr_time in *) (* time is not actually needed in practice on branches *)
             let body = if b then true_body else false_body in
             let* () = push_branch (Direction.Bool_direction (b, e_b)) in
-            k body
+            eval body
           | v -> type_mismatch @@ Error_msg.cond_non_bool v
-        end
-      | ECase { subject ; cases ; default } -> begin
+          end
+      | ECase { subject ; cases ; default } ->
           let int_cases = List.map fst cases in
           let* v = stern_eval subject in
-          match v with
-          | VInt (i, e_i) -> begin
+          begin match v with
+          | VInt (i, e_i) ->
               (* let* () = incr_time in *) (* time is not actually needed in practice on branches *)
-              let body_opt = List.find_map (fun (i', body) -> if i = i' then Some body else None) cases in
-              match body_opt with
+              let body_opt =
+                List.find_map (fun (i', body) ->
+                  if i = i' then Some body else None
+                ) cases
+              in
+              begin match body_opt with
               | Some body ->
                 let not_in = List.filter ((<>) i) int_cases in
-                let* () = push_branch (Direction.Int_direction { dir = Case_int i ; formula = e_i ; not_in }) in
-                k body
+                let* () = push_branch
+                  (Direction.Int_direction { dir = Case_int i ; formula = e_i ; not_in })
+                in
+                eval body
               | None ->
-                let* () = push_branch (Direction.Int_direction { dir = Case_default ; formula = e_i ; not_in = int_cases }) in
-                k default
-            end
+                let* () = push_branch
+                  (Direction.Int_direction { dir = Case_default ; formula = e_i ; not_in = int_cases })
+                in
+                eval default
+              end
           | v -> type_mismatch @@ Error_msg.case_non_int v
-        end
+          end
       (* closures and applications *)
       | EFunction { param ; body } ->
         let* env = read in
@@ -118,14 +125,14 @@ module Make (K : Effects.KEY) = struct
       | ELet { var ; defn ; body } ->
         let* v = eval defn in
         local (Env.add var v) (eval body)
-      | EAppl { func ; arg } -> begin
+      | EAppl { func ; arg } ->
           let* v = stern_eval func in
-          match v with
+          begin match v with
           | VFunClosure { param ; closure } ->
             let* v = eval arg in
-            local (fun _ -> Env.add param v closure.env) (k closure.body)
+            local (fun _ -> Env.add param v closure.env) (eval closure.body)
           | v -> type_mismatch @@ Error_msg.bad_appl v
-        end
+          end
       (* modules, records, and variants  *)
       | ERecord label_map ->
         let* value_record_body =
@@ -141,23 +148,22 @@ module Make (K : Effects.KEY) = struct
         return (VVariant { label ; payload = v })
       | EModule stmt_ls ->
         let* module_body =
-          let rec fold_stmts acc_m = function
-            | [] -> acc_m
+          let rec fold_stmts acc = function
+            | [] -> return acc
             | Lang.Ast.Expr.SUntyped { var ; defn } :: tl ->
-              let* acc = acc_m in
               let* v = eval defn in
               local (Env.add var v) (
-                fold_stmts (return @@ RecordLabel.Map.add (Lang.Ast.RecordLabel.RecordLabel var) v acc) tl
+                fold_stmts (RecordLabel.Map.add (Lang.Ast.RecordLabel.RecordLabel var) v acc) tl
               )
           in
-          fold_stmts (return Lang.Ast.RecordLabel.Map.empty) stmt_ls
+          fold_stmts Lang.Ast.RecordLabel.Map.empty stmt_ls
         in
         return @@ VModule module_body
       | EUntouchable e ->
         let* v = eval e in
         return (VUntouchable v)
       (* deferral *)
-      | EDefer body -> if is_stern then k body else defer body
+      | EDefer body -> defer body
       (* termination *)
       | EVanish () -> vanish
       | EAbort msg -> abort msg
@@ -174,20 +180,20 @@ module Make (K : Effects.KEY) = struct
       match expr with
       | EDefer body -> stern_eval body (* When sternly evaluating a deferred thing, we can just directly eval the thing *)
       | _ ->
-        let* v = eval ~is_stern:true expr in
-        let* () = incr_step ~max_step in
+        let* v = eval expr in
         let* () = incr_n_stern_steps in
-        Value.split v
-          ~symb:(fun ((VSymbol t) as sym) ->
-              let* s = get in
-              match Time_map.find_opt t s.State.symbol_map with
-              | Some v -> return v
-              | None -> map_deferred_proof sym stern_eval
-            )
-          ~whnf:(fun v ->
-              let* () = optionally_map_some_deferred_proof stern_eval in
-              return v
-            )
+        force_val v
+
+    and force_val (v : Value.t) : Value.whnf m =
+      let* () = optionally_map_some_deferred_proof stern_eval in
+      Value.split v
+        ~symb:(fun ((VSymbol t) as sym) ->
+            let* s = get in
+            match Time_map.find_opt t s.State.symbol_map with
+            | Some v -> return v
+            | None -> map_deferred_proof sym stern_eval
+          )
+        ~whnf:return
 
     (*
       This does not monadically error.
