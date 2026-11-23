@@ -12,6 +12,7 @@ type t =
   ; n_solves     : int
   (* ; n_vanishes   : int *)
   ; target_depth : int option
+  ; target_priority : int option
   ; error_depth  : int option
   }
 
@@ -23,6 +24,7 @@ let create () =
   ; n_solves     = 0
   (* ; n_vanishes   = 0 *)
   ; target_depth = None
+  ; target_priority = None
   ; error_depth  = None
   }
 
@@ -36,5 +38,6 @@ let combine a b =
   ; n_interps = a.n_interps + b.n_interps
   ; n_solves = a.n_solves + b.n_solves
   ; target_depth = sum_opts a.target_depth b.target_depth
+  ; target_priority = sum_opts a.target_priority b.target_priority
   ; error_depth = sum_opts a.error_depth b.error_depth
   }

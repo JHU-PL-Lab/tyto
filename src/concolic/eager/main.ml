@@ -10,12 +10,8 @@ module Error_msg = Lang.Value.Error_msg (Value)
   performance, but for this pass, we use a monad to encode the concolic
   semantics. It just helps with correctness that way.
 *)
-let eager_eval
-    (expr : Embedded.t)
-    (input_feeder : Interp_common.Step.t Interp_common.Input_feeder.t)
-    ~(max_step : Interp_common.Step.t)
+let eager_eval expr input_feeder ~max_step
     ~(default_input : 'a. 'a Interp_common.Input.Kind.t -> 'a)
-  : Status.Eval.t * Interp_common.Step.t Path.t * Interp_common.Input_feeder.Stepped.t
   =
   let open Effects in
 

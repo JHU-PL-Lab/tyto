@@ -31,7 +31,7 @@ module Make_BFS : MAKE = functor (K : Smt.Symbol.KEY) -> struct
     empty
 
   let push_one (BFS q : t) (target : k Target.t) : t =
-    BFS (Q.push target (Target.path_n target) q)
+    BFS (Q.push target target.priority q)
 
   let push_list (x : t) (ls : k Target.t list) : t =
     List.fold_left push_one x ls
@@ -60,10 +60,10 @@ module Make_DFS : MAKE = functor (K : Smt.Symbol.KEY) -> struct
 
   (*
     We push targets such that higher number of strides is worse priority, but within
-    the same stride count, the higher path_n is better priority.
+    the same stride count, the greater priority is actually better.
   *)
   let push_one ({ q ; stride } as x : t) (target : k Target.t) : t =
-    let n = Target.path_n target in
+    let n = target.priority in
     let n_strides = n / stride + 1 in
     { x with q = Q.push target (n_strides * stride - n mod stride) q }
 

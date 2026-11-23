@@ -21,7 +21,8 @@ module type DRIVER = sig
 end
 
 module type S = sig
-  module Make (_ : Target_queue.MAKE) (_ : Evaluator.EVAL) () : DRIVER
+  module Make (Key : Evaluator.KEY) (_ : Target_queue.MAKE)
+    (_ : Evaluator.EVAL with type key = Key.t) () : DRIVER
 
   module Eager : DRIVER
 
@@ -33,9 +34,9 @@ module type S = sig
 end
 
 module Of_logger (Logger : Evaluator.LOGGER) : S = struct
-  module Make (Make_tq : Target_queue.MAKE) (C : Evaluator.EVAL) () : DRIVER = struct
-
-    module Eval = Evaluator.Make (Make_tq) (Logger)
+  module Make (Key : Evaluator.KEY) (Make_tq : Target_queue.MAKE)
+      (C : Evaluator.EVAL with type key = Key.t) () : DRIVER = struct
+    module Eval = Evaluator.Make (Key) (Make_tq) (Logger)
 
     let solve = Smt.Solve.main_solve (module Overlays.Typed_z3.Default)
 
@@ -149,12 +150,14 @@ module Of_logger (Logger : Evaluator.LOGGER) : S = struct
       test_some_program ~options ~do_wrap ~do_type_splay pgm
   end
 
-  module Eager = Make (Target_queue.Make_BFS) (struct
+  module Eager = Make (Interp_common.Step) (Target_queue.Make_BFS) (struct
+    type key = Interp_common.Step.t
     let eval = Eager.Main.eager_eval
   end) ()
 
-  module Deferred = Make (Target_queue.Make_BFS) (struct
-    let eval = Deferred.Main.deferred_eval
+  module Deferred = Make (Interp_common.Timestamp) (Target_queue.Make_BFS) (struct
+    type key = Interp_common.Timestamp.t
+    let eval = Deferred.Main.With_times.deferred_eval
   end) ()
 
   module Default = Eager

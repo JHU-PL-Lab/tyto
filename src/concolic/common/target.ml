@@ -4,6 +4,7 @@ let uid = Utils.Counter.create ()
 
 type 'k t =
   { path_n : int
+  ; priority : int
   ; uniq_id : int
   ; i_env : 'k Interp_common.Input_feeder.t
   ; target_formula : (bool, 'k) Smt.Formula.t
@@ -13,6 +14,7 @@ let initial_id = Utils.Counter.next uid
 
 let empty : 'k t =
   { path_n = 0
+  ; priority = 0
   ; uniq_id = initial_id
   ; i_env = Interp_common.Input_feeder.empty
   ; target_formula = Smt.Formula.trivial
@@ -22,12 +24,11 @@ let empty : 'k t =
 let make (last_formula : (bool, 'k) Smt.Formula.t)
   (other_formulas : (bool, 'k) Smt.Formula.t list)
   (i_env : 'k Interp_common.Input_feeder.t)
-  ~(priority : int) : 'k t =
+  ~(priority : int) ~(path_n : int) : 'k t =
   let target_formula = Smt.Formula.scc last_formula ~wrt:other_formulas
   and all_formulas = last_formula :: other_formulas
-  and uniq_id = Utils.Counter.next uid
-  and path_n = priority in
-  { target_formula ; all_formulas ; i_env ; uniq_id ; path_n }
+  and uniq_id = Utils.Counter.next uid in
+  { target_formula ; all_formulas ; i_env ; uniq_id ; priority ; path_n }
 
 (*
   SUPER IMPORTANT NOTE:
@@ -42,6 +43,3 @@ let make (last_formula : (bool, 'k) Smt.Formula.t)
 *)
 let compare (a : 'k t) (b : 'k t) : int =
   Int.compare a.uniq_id b.uniq_id
-
-let path_n ({ path_n ; _ } : 'k t) : int =
-  path_n

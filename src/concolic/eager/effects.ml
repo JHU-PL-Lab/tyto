@@ -8,7 +8,7 @@ module Feeder = Input_feeder.Make (Step)
 
 module State = struct
   type t =
-    { path : k Path.t
+    { path : (k, k) Path.t
     ; inputs : k Input_feeder.t }
 
   let empty : t =
@@ -73,8 +73,9 @@ let get_input (type a) (kind : a Input.Kind.t) ~(default : a)
     ) in
     return @@ Value.M.VBool (v, Smt.Formula.symbol (Step_symbol.make_bool k))
 
-let run (x : 'a m) : Status.Eval.t * k Path.t * k Input_feeder.t =
+let run (x : 'a m) : Status.Eval.t * (k, k) Path.t * k Input_feeder.t =
   match run x State.empty Value.Env.empty with
   | Ok _, state, _ ->
     Status.Finished, state.path, state.inputs
-  | Error e, state, _ -> e, state.path, state.inputs
+  | Error e, state, _ ->
+    e, state.path, state.inputs

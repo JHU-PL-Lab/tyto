@@ -25,6 +25,10 @@ let extract_exn (type a) (kind : a Kind.t) (input : t) : a =
   | KInt, IInt i -> i
   | _ -> raise ExtractionException
 
+let extract_opt kind input =
+  try Some (extract_exn kind input) with
+  | ExtractionException -> None
+
 let to_string = function
   | IBool b -> Bool.to_string b
   | IInt i -> Int.to_string i

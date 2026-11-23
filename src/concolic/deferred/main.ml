@@ -86,7 +86,7 @@ module Make (K : Effects.KEY) = struct
           let* v = stern_eval cond in
           begin match v with
           | VBool (b, e_b) ->
-            (* let* () = incr_time in *) (* time is not actually needed in practice on branches *)
+            let* () = incr_time in
             let body = if b then true_body else false_body in
             let* () = push_branch (Direction.Bool_direction (b, e_b)) in
             eval body
@@ -97,7 +97,7 @@ module Make (K : Effects.KEY) = struct
           let* v = stern_eval subject in
           begin match v with
           | VInt (i, e_i) ->
-              (* let* () = incr_time in *) (* time is not actually needed in practice on branches *)
+              let* () = incr_time in
               let body_opt =
                 List.find_map (fun (i', body) ->
                   if i = i' then Some body else None
@@ -234,4 +234,9 @@ end
 include Make (struct
   include Interp_common.Step
   let choose _time step = step
+end)
+
+module With_times = Make (struct
+  include Interp_common.Timestamp
+  let choose time _step = time
 end)

@@ -15,6 +15,7 @@
 
 type 'k t =
   { path_n : int
+  ; priority : int
   ; uniq_id : int
   ; i_env : 'k Interp_common.Input_feeder.t
   ; target_formula : (bool, 'k) Smt.Formula.t
@@ -24,12 +25,9 @@ val empty : 'k t
 (** [empty] is the target with no formulas. i.e. it is unconstrained. *)
 
 val make : (bool, 'k) Smt.Formula.t -> (bool, 'k) Smt.Formula.t list ->
-  'k Interp_common.Input_feeder.t -> priority:int -> 'k t
+  'k Interp_common.Input_feeder.t -> priority:int -> path_n:int -> 'k t
 
 val compare : 'k t -> 'k t -> int
 (** [compare a b] uses the unique identifiers in [a] and [b] to compare,
     and hence only literal equality (of memory location) is sufficient
     for [compare a b] to be [0]. *)
-
-val path_n : 'k t -> int
-(** [path_n target] is the length of the path to the [target]. *)

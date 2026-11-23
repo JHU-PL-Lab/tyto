@@ -1,4 +1,5 @@
 
+open Interp_common
 open Common
 
 (*
@@ -40,17 +41,16 @@ val type_mismatch : string -> 'a m
 val vanish : 'a m
 (** [vanish] is a safe monadic exit. *)
 
-val step : Interp_common.Step.t m
+val step : Step.t m
 (** [step] is the current step count. *)
 
-val incr_step : max_step:Interp_common.Step.t -> unit m
+val incr_step : max_step:Step.t -> unit m
 (** [incr_step ~max_step] updates the state and quits if [max_step] has been exceeded. *)
 
-val push_branch : Interp_common.Step.t Direction.t -> unit m
+val push_branch : Step.t Direction.t -> unit m
 (** [push_branch dir] pushes the [dir] onto the stateful path. *)
 
-val get_input : 'a Interp_common.Input.Kind.t -> default:'a
-  -> Interp_common.Step.t Interp_common.Input_feeder.t -> Value.t m
+val get_input : 'a Input.Kind.t -> default:'a -> Input_feeder.Stepped.t -> Value.t m
 
-val run : 'a m -> Status.Eval.t * Interp_common.Step.t Path.t * Interp_common.Input_feeder.Stepped.t
+val run : 'a m -> Status.Eval.t * (Step.t, Step.t) Path.t * Input_feeder.Stepped.t
 (** [run x] is the result of the monad run on an empty initial state and environment. *)

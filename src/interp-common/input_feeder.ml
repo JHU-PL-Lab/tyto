@@ -32,9 +32,9 @@ module Make (K : Smt.Symbol.KEY) = struct
 
   let empty : t = UMap.empty ()
 
-  (* Propagates failing extraction. Is None if the key doesn't exist at all *)
+  (* Hides failing extraction because input environments might be reused. *)
   let find (type a) (kind : a Input.Kind.t) (key : K.t) (m : t) : a option =
-    Option.map (Input.extract_exn kind) (UMap.find_opt (K.uid key) m)
+    Option.bind (UMap.find_opt (K.uid key) m) (Input.extract_opt kind)
 
   let add (type a) (kind : a Input.Kind.t) (key : K.t) (input : a) (m : t) : t =
     UMap.add (K.uid key) (

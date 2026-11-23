@@ -45,7 +45,7 @@ module Make (K : KEY) = struct
       ; symbol_map : Value.Symbol_map.t
       ; pending_proofs : Value.Pending_proofs.t
       ; n_stern_steps : Step.t
-      ; path : k Path.t
+      ; path : (k, Timestamp.t) Path.t
       ; inputs : Feeder.t }
 
     let empty : t =
@@ -56,10 +56,14 @@ module Make (K : KEY) = struct
       ; path = Path.empty
       ; inputs = Input_feeder.empty }
 
-    let remove_greater_symbols (s : t) : t =
+    (* Delete any bigger symbols from the maps and anything from that path that
+      should not have happened. *)
+    let remove_greater (s : t) : t =
       { s with
         symbol_map = Value.Symbol_map.cut (VSymbol s.time) s.symbol_map
-      ; pending_proofs = Value.Pending_proofs.cut (VSymbol s.time) s.pending_proofs }
+      ; pending_proofs = Value.Pending_proofs.cut (VSymbol s.time) s.pending_proofs
+      ; path = Path.find_all (fun t -> Timestamp.compare t s.time <= 0) s.path
+      }
 
     let incr_stern_step (s : t) : t =
       { s with n_stern_steps = Step.next s.n_stern_steps }
@@ -168,6 +172,7 @@ module Make (K : KEY) = struct
     { run = fun ~reject ~accept state step env ->
       if Step.to_int state.n_stern_steps land 31 = 0 (* quick way to check it is 0 (mod 32) *)
       && not (Time_map.is_empty state.pending_proofs) (* ... and there is some pending proof we can work on *)
+      && Rand.bool () (* HAVOC *)
       then
         let (t, _) = Time_map.choose state.pending_proofs in
         (map_deferred_proof (VSymbol t) f).run ~reject
@@ -186,7 +191,7 @@ module Make (K : KEY) = struct
 
   let fail_and_filter (err : State.t -> Status.Eval.t) : 'a m =
     { run = fun ~reject ~accept:_ state step _ ->
-        reject (err state) (State.remove_greater_symbols state) step
+        reject (err state) (State.remove_greater state) step
     }
 
   (* timestamp payload on error is just for printing. It is not used in tracking at all *)
@@ -209,9 +214,8 @@ module Make (K : KEY) = struct
     if Smt.Formula.is_const @@ Direction.to_formula dir then
       return ()
     else
-      let* step in
       modify (fun (s : State.t) ->
-        { s with path = Path.cons dir (K.choose s.time step) s.path }
+        { s with path = Path.cons dir s.time s.path }
       )
 
   let[@inline always] defer (body : Lang.Ast.Embedded.t) : Value.t m =
@@ -253,5 +257,4 @@ module Make (K : KEY) = struct
 
   let run (x : 'a s) =
     run_safe x State.empty Value.Env.empty
-
 end

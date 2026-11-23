@@ -13,6 +13,7 @@ type count_kind =
 type depth_kind =
   | Target_depth (* How many branches were in the target that led to the error *)
   | Error_depth  (* How many branches were in the path that led to the error *)
+  | Target_priority (* Smaller priority is better *)
   [@@deriving eq]
 
 type t =
