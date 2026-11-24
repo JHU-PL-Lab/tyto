@@ -79,10 +79,13 @@ module Of_logger (Logger : Evaluator.LOGGER) : S = struct
           (* Nothing to do in parallel if only one program *)
           test_with_timeout ~options @@ Lang.Ast_tools.Utils.pgm_to_module pgm
         | pgms ->
-          let run pgm =
+          let run yield pgm =
             (* makes a new solver for this thread *)
             let module Z = Overlays.Typed_z3.Make () in
-            let solve = Smt.Solve.main_solve (module Z) in
+            let solve e =
+              yield (); (* yield control to scheduler on every target solve *)
+              Smt.Solve.main_solve (module Z) e
+            in
             let expr = Lang.Ast_tools.Utils.pgm_to_module pgm in
             Eval.c_loop ~options C.eval solve expr
           in

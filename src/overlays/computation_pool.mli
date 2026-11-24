@@ -2,9 +2,9 @@
 (**
   Module [Computation_pool].
 
-  This module provides an interface to the [Moonpool] library
-  to allow parallel computation of items in a list until one of
-  this items finishes and signals to quit.
+  This module provides an interface to the [Moonpool] library to allow parallel
+  computation of items in a list until one of this items finishes and signals to
+  quit.
 *)
 
 module type COMPUTE_RESULT = sig
@@ -12,8 +12,11 @@ module type COMPUTE_RESULT = sig
   val is_signal_to_quit : t -> bool
 end
 
-val process_all : (module C : COMPUTE_RESULT) -> ('a -> C.t) -> 'a Nel.t -> C.t
+val process_all : (module C : COMPUTE_RESULT) -> ((unit -> unit) -> 'a -> C.t)
+    -> 'a Nel.t -> C.t
 (** [process_all (module C) run work_items] runs the computation [run] on all
     items in [work_items] at once. Each item gets a fresh domain even if there
-    is just one work item. *)
+    is just one work item. The [run] function must first take a function that
+    yields control to the scheduler, which it should call every now and then to
+    allow cancellation. *)
 
