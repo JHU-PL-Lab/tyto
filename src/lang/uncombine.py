@@ -100,7 +100,10 @@ def parse_args():
     parser.add_argument(
         "--targets", nargs="+", required=True,
         help="The target files to generate.")
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.combined = [os.path.normpath(f) for f in args.combined]
+    args.ignore_combined = [os.path.normpath(f) for f in args.ignore_combined]
+    return args
 
 def uncombine_text(
         target_filename, combined_text: str, target_prefix: str
