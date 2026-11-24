@@ -37,7 +37,6 @@ module type KEY = sig
 end
 
 module Make (K : KEY) (Make_tq : Target_queue.MAKE) (Logger : LOGGER) = struct
-  (* module TKey = Step Keys for formulas in targets *)
   type key = K.t
   module Tq = Make_tq (K)
   module Feeder = Input_feeder.Make (K)

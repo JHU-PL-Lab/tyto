@@ -1,11 +1,4 @@
 
-(*
-  We will use a zipper map that has fast reads and writes nearest the last read
-  or write because inputs are very often read and written in increasing order.
-  Inputs are keyed by how many steps the program has taken, which is increasing.
-  It only takes exactly one traversal to reset at the start of the program, and
-  otherwise the actions are cheap.
-*)
 module UMap = Utils.Uid.Map
 
 (* phantom key type *)
@@ -23,7 +16,6 @@ module type S = sig
   val to_string : t -> string
   val of_model : K.t Smt.Model.t -> t
   val image : t -> Input.t list
-  val less_than : t -> K.t -> t
 end
 
 module Make (K : Smt.Symbol.KEY) = struct
@@ -69,10 +61,6 @@ module Make (K : Smt.Symbol.KEY) = struct
 
   let image m =
     List.map snd (UMap.to_list m)
-
-  let less_than m k =
-    let lt, _eq_opt, _gt = UMap.split (K.uid k) m in
-    lt
 end
 
 module Timestamped = Make (Timestamp)

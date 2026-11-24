@@ -13,7 +13,6 @@ module type S = sig
   val to_string : t -> string
   val of_model : K.t Smt.Model.t -> t
   val image : t -> Input.t list
-  val less_than : t -> K.t -> t
 end
 
 module Make : (K : Smt.Symbol.KEY) -> S with module K = K
