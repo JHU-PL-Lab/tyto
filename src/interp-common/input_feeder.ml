@@ -6,12 +6,12 @@
   It only takes exactly one traversal to reset at the start of the program, and
   otherwise the actions are cheap.
 *)
-module UMap = Utils.Zipper_map.Make (Utils.Uid)
+module UMap = Utils.Uid.Map
 
 (* phantom key type *)
 type 'k t = Input.t UMap.t
 
-let empty : 'k. 'k t = UMap.empty ()
+let empty : 'k. 'k t = UMap.empty
 
 module type S = sig
   module K : Smt.Symbol.KEY
@@ -30,7 +30,7 @@ module Make (K : Smt.Symbol.KEY) = struct
   module K = K
   type nonrec t = K.t t
 
-  let empty : t = UMap.empty ()
+  let empty : t = UMap.empty
 
   (* Hides failing extraction because input environments might be reused. *)
   let find (type a) (kind : a Input.Kind.t) (key : K.t) (m : t) : a option =
@@ -71,7 +71,8 @@ module Make (K : Smt.Symbol.KEY) = struct
     List.map snd (UMap.to_list m)
 
   let less_than m k =
-    UMap.less_than m (K.uid k)
+    let lt, _eq_opt, _gt = UMap.split (K.uid k) m in
+    lt
 end
 
 module Timestamped = Make (Timestamp)
