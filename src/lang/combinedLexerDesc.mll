@@ -132,6 +132,7 @@ rule token = parse
 (*! endscope !*)
 | digit+ as n          { INT (int_of_string n) }
 | ident_start ident_cont* as s     { IDENTIFIER s }
+| _* as s               { failwith ("Lexer - cannot lex token " ^ s) }
 
 and multi_line_comment depth = parse
 | "(*" { multi_line_comment (depth + 1) lexbuf }
