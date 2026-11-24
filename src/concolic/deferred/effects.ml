@@ -36,9 +36,7 @@ module Make (K : KEY) = struct
       Real effects are starting to seem tempting.
       Or we could group the fields into those that are more/less likely to change. *)
     (*
-      The symbol maps could go together (but don't have a _great_ reason to), and
-      the input log could be an add-on only when logging is needed (it's sort of just
-      a debugging thing).
+      The symbol maps could go together (but don't have a _great_ reason to).
     *)
     type t =
       { time : Timestamp.t

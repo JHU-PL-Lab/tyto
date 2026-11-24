@@ -22,12 +22,6 @@ module type KEY = sig
   val compare : t -> t -> int
 end
 
-(*
-  Here, we have passed in a logger that has already been transformed with the P monad.
-  This is in contrast to how we pass in a key and a functor to make a target queue from that key.
-  The parallel would be to pass in a log transformer.
-  (But I should just pass in a made target queue and pull the k from that!)
-*)
 module Make : functor (K : KEY) (_ : Target_queue.MAKE) (_ : LOGGER) -> sig
   val c_loop : options:Options.t -> K.t eval -> K.t Smt.Solve.solver
     -> Lang.Ast.Embedded.t -> Status.Terminal.t

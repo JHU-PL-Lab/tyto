@@ -13,7 +13,7 @@
     if this property is violated.
 *)
 
-type 'k t =
+type 'k t = private
   { path_n : int
   ; priority : int
   ; uniq_id : int

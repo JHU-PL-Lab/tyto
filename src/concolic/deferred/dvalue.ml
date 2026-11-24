@@ -109,20 +109,26 @@ module Make (V : Utils.Equatable.P1) = struct
     | VInt vi -> V.to_string Int.to_string vi
     | VBool vb -> V.to_string Bool.to_string vb
     | VFunClosure { param = Ident s ; _ } -> Format.sprintf "(fun %s -> <expr>)" s
-    | VVariant { label ; payload } -> Format.sprintf "(`%s (%s))" (VariantLabel.to_string label) (to_string payload)
+    | VVariant { label ; payload } ->
+        Format.sprintf "(`%s (%s))" (VariantLabel.to_string label) (to_string payload)
     | VRecord record_body -> RecordLabel.record_body_to_string ~sep:"=" record_body to_string
     | VModule module_body ->
       Format.sprintf "struct %s end"
-      (String.concat " " @@ List.map (fun (key, data) -> Format.sprintf "let %s = %s" (RecordLabel.to_string key) (to_string data)) (RecordLabel.Map.to_list module_body))
+      (String.concat " " @@ List.map (fun (key, data) ->
+        Format.sprintf "let %s = %s" (RecordLabel.to_string key) (to_string data))
+          (RecordLabel.Map.to_list module_body)
+      )
     | VUntouchable v -> Format.sprintf "Untouchable (%s)" (to_string v)
     | VSymbol t -> Format.sprintf "T%s" (Interp_common.Timestamp.to_string t)
 
   module Error_msg = struct
     let project_non_record label v =
-      Format.sprintf "Label %s not found in non-record/module `%s`" (RecordLabel.to_string label) (to_string v)
+      Format.sprintf "Label %s not found in non-record/module `%s`"
+        (RecordLabel.to_string label) (to_string v)
 
     let project_missing_label label record =
-      Format.sprintf "Label %s not found in record/module %s" (RecordLabel.to_string label) (to_string record)
+      Format.sprintf "Label %s not found in record/module %s"
+        (RecordLabel.to_string label) (to_string record)
 
     let thaw_non_frozen v =
       Format.sprintf "Thaw non-frozen value `%s`" (to_string v)
@@ -159,8 +165,8 @@ module Make (V : Utils.Equatable.P1) = struct
 
     let empty : t = Time_map.empty
 
-    (* May want to raise an exception, just to check invariants, if the symbol is duplicate *)
     let push (VSymbol t : symb) (work : closure) (m : t) : t =
+      assert (not (Time_map.mem t m));
       Time_map.add t work m
 
     let pop (VSymbol t : symb) (m : t) : (closure * t) option =
