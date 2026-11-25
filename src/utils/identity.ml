@@ -14,10 +14,3 @@ let put a = a
 let get a = a
 
 let equal eq a b = eq a b
-
-module Monad : Types.MONAD with type 'a m = 'a = struct
-  type 'a m = 'a
-  let[@inline always] return a = a
-  let[@inline always] bind x f = f x
-  let ( let* ) = bind
-end

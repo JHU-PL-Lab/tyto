@@ -92,14 +92,15 @@ module RecordLabel = struct
   end
 
   include T
-  module Map = Baby.W.Map.Make (T)
+  include Utils.Set_map.Make_W (T)
 
   let to_string (RecordLabel Ident s) = s
 
   let record_body_to_string ?(sep : string = "=") m f =
     let items =
-      Map.to_list m
-      |> List.map (fun (l, x) -> Printf.sprintf "%s %s %s" (to_string l) sep (f x))
+      Map.list_map (fun l x ->
+        Printf.sprintf "%s %s %s" (to_string l) sep (f x)
+      ) m
     in
     match items with
     | [] -> "{:}"

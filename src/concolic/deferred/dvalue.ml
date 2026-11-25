@@ -114,10 +114,9 @@ module Make (V : Utils.Equatable.P1) = struct
     | VRecord record_body -> RecordLabel.record_body_to_string ~sep:"=" record_body to_string
     | VModule module_body ->
       Format.sprintf "struct %s end"
-      (String.concat " " @@ List.map (fun (key, data) ->
-        Format.sprintf "let %s = %s" (RecordLabel.to_string key) (to_string data))
-          (RecordLabel.Map.to_list module_body)
-      )
+      (String.concat " " @@ RecordLabel.Map.list_map (fun key data ->
+        Format.sprintf "let %s = %s" (RecordLabel.to_string key) (to_string data)
+      ) module_body)
     | VUntouchable v -> Format.sprintf "Untouchable (%s)" (to_string v)
     | VSymbol t -> Format.sprintf "T%s" (Interp_common.Timestamp.to_string t)
 

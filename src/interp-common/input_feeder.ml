@@ -38,13 +38,12 @@ module Make (K : Smt.Symbol.KEY) = struct
   let extend = UMap.extend
 
   let to_string (m : t) : string =
-    let make_mapping (uid, input) =
+    let make_mapping uid input =
       Printf.sprintf "%d |-> %s" (Utils.Uid.to_int uid) (Input.to_string input)
     in
     let body =
       m
-      |> UMap.to_list
-      |> List.map make_mapping
+      |> UMap.list_map make_mapping
       |> String.concat " ; "
     in
     Printf.sprintf "{ %s }" body
@@ -60,7 +59,7 @@ module Make (K : Smt.Symbol.KEY) = struct
     ) empty model.domain
 
   let image m =
-    List.map snd (UMap.to_list m)
+    UMap.list_map (fun _ data -> data) m
 end
 
 module Timestamped = Make (Timestamp)

@@ -246,9 +246,9 @@ module Make (Store : STORE) (Env_cell : CELL) (V : Utils.Equatable.P1) = struct
     | VRecord record_body -> RecordLabel.record_body_to_string ~sep:"=" record_body _to_string
     | VModule module_body ->
       Format.sprintf "struct %s end"
-        (String.concat " " @@ List.map (fun (key, data) ->
+        (String.concat " " @@ RecordLabel.Map.list_map (fun key data ->
             Format.sprintf "let %s = %s" (RecordLabel.to_string key) (_to_string data)
-          ) (RecordLabel.Map.to_list module_body))
+          ) module_body)
     | VTypeMismatch -> "Type_mismatch"
     | VUnboundVariable Ident v -> Format.sprintf "Unbound_variable %s" v
     | VAbort -> "Abort"
